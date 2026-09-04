@@ -1,0 +1,8 @@
+{
+  "name": "Sacred Heart Academy Portal",
+  "description": "Comprehensive School Management Portal for Sacred Heart Academy, Garchitorena, Camarines Sur, Philippines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
