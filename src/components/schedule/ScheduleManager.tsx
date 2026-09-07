@@ -21,6 +21,7 @@ import {
   Users,
   DoorOpen,
   Filter,
+  Search,
   X,
   CheckCircle2,
   ShieldAlert,
@@ -67,6 +68,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [conflicts, setConflicts] = useState<ScheduleConflict[]>([]);
   const [allowOverride, setAllowOverride] = useState(false);
+
+  // Search/filter for the complete schedule table.
+  const [tableSearch, setTableSearch] = useState('');
 
   // Form State
   const [form, setForm] = useState<{
@@ -349,6 +353,201 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* Complete Schedule Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-slate-200">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-emerald-800" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Complete Schedule Table
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Add, edit, or remove teacher schedule entries. Teacher names come directly from the existing Teacher Management records.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative w-full lg:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+                placeholder="Search teacher, subject, section, room..."
+                className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:border-emerald-700"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          {(() => {
+            const normalizedSearch = tableSearch.trim().toLowerCase();
+
+            const tableSchedules = [...schedules]
+              .filter((sch) => {
+                if (!normalizedSearch) return true;
+
+                const teacher = teachers.find((t) => t.id === sch.teacherId);
+                const subject = subjects.find((s) => s.id === sch.subjectId);
+                const section = sections.find((s) => s.id === sch.sectionId);
+                const room = rooms.find((r) => r.id === sch.roomId);
+
+                const searchable = [
+                  teacher?.fullName,
+                  teacher?.teacherId,
+                  subject?.subjectName,
+                  subject?.subjectCode,
+                  section?.name,
+                  room?.name,
+                  room?.building,
+                  sch.dayOfWeek,
+                  sch.startTime,
+                  sch.endTime,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+                  .toLowerCase();
+
+                return searchable.includes(normalizedSearch);
+              })
+              .sort((a, b) => {
+                const dayOrder = DAYS_OF_WEEK.indexOf(a.dayOfWeek) - DAYS_OF_WEEK.indexOf(b.dayOfWeek);
+                if (dayOrder !== 0) return dayOrder;
+                return a.startTime.localeCompare(b.startTime);
+              });
+
+            return tableSchedules.length === 0 ? (
+              <div className="p-10 text-center">
+                <CalendarDays className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-600">
+                  No schedule entries found
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Click “Add Timetable Entry” to create a schedule.
+                </p>
+              </div>
+            ) : (
+              <table className="w-full min-w-[1050px] text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-left">
+                    <th className="px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Day / Time</th>
+                    <th className="px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Teacher</th>
+                    <th className="px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Subject</th>
+                    <th className="px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Grade / Section</th>
+                    <th className="px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Room</th>
+                    <th className="px-4 py-3 font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {tableSchedules.map((sch) => {
+                    const teacher = teachers.find((t) => t.id === sch.teacherId);
+                    const subject = subjects.find((s) => s.id === sch.subjectId);
+                    const section = sections.find((s) => s.id === sch.sectionId);
+                    const room = rooms.find((r) => r.id === sch.roomId);
+                    const grade = gradeLevels.find((g) => g.id === sch.gradeLevelId);
+
+                    return (
+                      <tr key={sch.id} className="hover:bg-emerald-50/40 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="font-bold text-slate-800">{sch.dayOfWeek}</div>
+                          <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-semibold mt-0.5">
+                            <Clock className="w-3 h-3" />
+                            {formatTime12h(sch.startTime)} – {formatTime12h(sch.endTime)}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-900">
+                            {teacher?.fullName || 'Unassigned Teacher'}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {teacher?.teacherId || 'No Teacher ID'}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-800">
+                            {subject?.subjectName || 'Subject'}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                            {subject?.subjectCode || '—'}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-800">
+                            {section?.name || 'Section'}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {grade?.name || 'Grade Level'}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                            <DoorOpen className="w-3.5 h-3.5 text-slate-400" />
+                            {room?.name || 'No Room'}
+                          </div>
+                          {room?.building && (
+                            <div className="text-[10px] text-slate-400 ml-5 mt-0.5">
+                              {room.building}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(sch)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold transition-colors"
+                              title="Edit Schedule"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Remove this schedule for ${teacher?.fullName || 'this teacher'}?`
+                                  )
+                                ) {
+                                  onDeleteSchedule(sch.id);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold transition-colors"
+                              title="Delete Schedule"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })()}
+        </div>
+
+        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-500">
+          <span className="font-bold text-slate-700">{schedules.length}</span> total schedule entr{schedules.length === 1 ? 'y' : 'ies'}.
+          Use the <span className="font-semibold text-emerald-800">Edit</span> button to change an existing entry or
+          <span className="font-semibold text-emerald-800"> Add Timetable Entry</span> for a new teacher schedule.
+        </div>
       </div>
 
       {/* Add / Edit Timetable Period Modal */}

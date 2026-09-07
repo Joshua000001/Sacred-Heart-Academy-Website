@@ -137,6 +137,11 @@ const [documentRequest, setDocumentRequest] = useState({
       return;
     }
 
+    if (!documentRequest.gradeLevel) {
+      setRequestError('Please select the grade / level.');
+      return;
+    }
+
     if (!documentRequest.purpose) {
       setRequestError('Please select the purpose of the request.');
       return;
@@ -923,17 +928,29 @@ const [documentRequest, setDocumentRequest] = useState({
 
                       <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                          Mobile Number *
+                          Phone Number *
                         </label>
                         <input
                           required
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel"
+                          maxLength={13}
+                          pattern="^(09\d{9}|\+639\d{9})$"
+                          title="Enter a valid Philippine mobile number, e.g. 09123456789 or +639123456789."
                           value={documentRequest.mobile}
                           onChange={(e) =>
-                            handleDocumentRequestChange('mobile', e.target.value)
+                            handleDocumentRequestChange(
+                              'mobile',
+                              e.target.value.replace(/[^0-9+]/g, '')
+                            )
                           }
                           placeholder="09XXXXXXXXX"
                           className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
                         />
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX
+                        </p>
                       </div>
                     </div>
                   </section>
@@ -1010,44 +1027,84 @@ const [documentRequest, setDocumentRequest] = useState({
 
                       <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                          Grade / Level
+                          Grade / Level *
                         </label>
-                        <input
+                        <select
+                          required
                           value={documentRequest.gradeLevel}
-                          onChange={(e) =>
-                            handleDocumentRequestChange('gradeLevel', e.target.value)
-                          }
-                          placeholder="e.g. Grade 12"
-                          className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                        />
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            handleDocumentRequestChange('gradeLevel', value);
+
+                            // Strand / Program is only applicable to Grades 11 and 12.
+                            if (value === 'Grade 7' || value === 'Grade 8' || value === 'Grade 9' || value === 'Grade 10') {
+                              handleDocumentRequestChange('strand', 'Not Applicable');
+                            } else if (documentRequest.strand === 'Not Applicable') {
+                              handleDocumentRequestChange('strand', '');
+                            }
+                          }}
+                          className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                          <option value="">Select Grade / Level</option>
+                          <option value="Grade 7">Grade 7</option>
+                          <option value="Grade 8">Grade 8</option>
+                          <option value="Grade 9">Grade 9</option>
+                          <option value="Grade 10">Grade 10</option>
+                          <option value="Grade 11">Grade 11</option>
+                          <option value="Grade 12">Grade 12</option>
+                        </select>
                       </div>
 
                       <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                           Strand / Program
                         </label>
-                        <input
+                        <select
                           value={documentRequest.strand}
+                          disabled={
+                            documentRequest.gradeLevel === 'Grade 7' ||
+                            documentRequest.gradeLevel === 'Grade 8' ||
+                            documentRequest.gradeLevel === 'Grade 9' ||
+                            documentRequest.gradeLevel === 'Grade 10'
+                          }
                           onChange={(e) =>
                             handleDocumentRequestChange('strand', e.target.value)
                           }
-                          placeholder="Academic / TechPro"
-                          className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                        />
+                          className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                          <option value="">Select Strand / Program</option>
+                          <option value="Academic">Academic</option>
+                          <option value="Technical-Vocational / TechPro">
+                            Technical-Vocational / TechPro
+                          </option>
+                          <option value="Not Applicable">Not Applicable</option>
+                        </select>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          For Grades 7–10, this field is automatically set to Not Applicable.
+                        </p>
                       </div>
 
                       <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                           School Year
                         </label>
-                        <input
+                        <select
                           value={documentRequest.schoolYear}
                           onChange={(e) =>
                             handleDocumentRequestChange('schoolYear', e.target.value)
                           }
-                          placeholder="e.g. 2018-2019"
-                          className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                        />
+                          className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                          <option value="">Select School Year</option>
+                          {Array.from({ length: 71 }, (_, index) => {
+                            const startYear = 2026 - index;
+                            return `${startYear}-${startYear + 1}`;
+                          }).map((schoolYear) => (
+                            <option key={schoolYear} value={schoolYear}>
+                              {schoolYear}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </section>

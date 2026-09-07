@@ -296,6 +296,7 @@ export default function App() {
     return (
       <LoginView
         schoolProfile={db.schoolProfile}
+        allUsers={db.users}
         onLoginSuccess={(u) => handleSelectUser(u)}
         onBackToHome={() => setShowLanding(true)}
       />

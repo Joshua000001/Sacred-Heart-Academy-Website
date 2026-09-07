@@ -5,6 +5,7 @@ import {
   Subject,
   Section,
   Teacher,
+  TeacherAssignment,
   User,
   GradeStatus,
 } from '../../types';
@@ -32,6 +33,7 @@ interface GradeManagementProps {
   subjects: Subject[];
   sections: Section[];
   teachers: Teacher[];
+  assignments: TeacherAssignment[];
   currentUser: User;
   onSaveBatchGrades: (
     records: GradeRecord[],
@@ -46,6 +48,7 @@ export const GradeManagement: React.FC<GradeManagementProps> = ({
   subjects,
   sections,
   teachers,
+  assignments,
   currentUser,
   onSaveBatchGrades,
 }) => {
@@ -56,7 +59,56 @@ export const GradeManagement: React.FC<GradeManagementProps> = ({
   
   const [classRecordTerm, setClassRecordTerm] = useState<'q1'|'q2'|'q3'|'q4'|null>(null);
 
-  // Find students in the selected section
+  const isTeacher = currentUser.role === 'TEACHER';
+  const teacherEntityId = isTeacher ? currentUser.relatedEntityId || '' : '';
+
+  // Teachers can only encode grades for their own subject/section assignments.
+  const visibleAssignments = isTeacher
+    ? assignments.filter((a) => a.teacherId === teacherEntityId)
+    : assignments;
+
+  const visibleSectionIds = Array.from(
+    new Set(visibleAssignments.map((a) => a.sectionId))
+  );
+
+  const visibleSections = isTeacher
+    ? sections.filter((section) => visibleSectionIds.includes(section.id))
+    : sections;
+
+  const subjectIdsForSelectedSection = Array.from(
+    new Set(
+      visibleAssignments
+        .filter((a) => a.sectionId === selectedSectionId)
+        .map((a) => a.subjectId)
+    )
+  );
+
+  const visibleSubjects = isTeacher
+    ? subjects.filter((subject) => subjectIdsForSelectedSection.includes(subject.id))
+    : subjects;
+
+  // Keep the selected section/subject valid after filtering.
+  React.useEffect(() => {
+    if (isTeacher) {
+      if (!visibleSections.some((section) => section.id === selectedSectionId)) {
+        setSelectedSectionId(visibleSections[0]?.id || '');
+      }
+    } else if (!selectedSectionId && sections[0]?.id) {
+      setSelectedSectionId(sections[0].id);
+    }
+  }, [isTeacher, selectedSectionId, visibleSections.map((s) => s.id).join('|')]);
+
+  React.useEffect(() => {
+    if (isTeacher) {
+      if (!visibleSubjects.some((subject) => subject.id === selectedSubjectId)) {
+        setSelectedSubjectId(visibleSubjects[0]?.id || '');
+      }
+    } else if (!selectedSubjectId && subjects[0]?.id) {
+      setSelectedSubjectId(subjects[0].id);
+    }
+  }, [isTeacher, selectedSubjectId, visibleSubjects.map((s) => s.id).join('|')]);
+
+  // Find students in the selected section.
   const sectionStudents = students.filter((s) => s.sectionId === selectedSectionId);
 
   // Local editable draft state for the selected grid
@@ -161,7 +213,13 @@ export const GradeManagement: React.FC<GradeManagementProps> = ({
         subjectId: selectedSubjectId,
         sectionId: selectedSectionId,
         schoolYearId: 'sy-2026-2027',
-        teacherId: currentUser.relatedEntityId || 'tch-austin',
+        teacherId:
+          existing?.teacherId ||
+          visibleAssignments.find(
+            (a) => a.subjectId === selectedSubjectId && a.sectionId === selectedSectionId
+          )?.teacherId ||
+          (isTeacher ? teacherEntityId : '') ||
+          'tch-austin',
         q1: q1Val,
         q2: q2Val,
         q3: q3Val,
@@ -236,7 +294,7 @@ export const GradeManagement: React.FC<GradeManagementProps> = ({
             onChange={(e) => setSelectedSectionId(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-bold text-slate-800 focus:ring-2 focus:ring-emerald-700"
           >
-            {sections.map((sec) => (
+            {visibleSections.map((sec) => (
               <option key={sec.id} value={sec.id}>
                 {sec.name}
               </option>
@@ -253,7 +311,7 @@ export const GradeManagement: React.FC<GradeManagementProps> = ({
             onChange={(e) => setSelectedSubjectId(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-bold text-slate-800 focus:ring-2 focus:ring-emerald-700"
           >
-            {subjects.map((sub) => (
+            {visibleSubjects.map((sub) => (
               <option key={sub.id} value={sub.id}>
                 {sub.subjectCode} — {sub.subjectName}
               </option>
@@ -273,7 +331,22 @@ export const GradeManagement: React.FC<GradeManagementProps> = ({
         </div>
       )}
 
+      {isTeacher && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-900">
+          <strong>Teacher access:</strong> You can encode and submit grades only for the subjects and sections assigned to your account.
+        </div>
+      )}
+
       {/* Grade Spreadsheet Grid */}
+      {isTeacher && visibleAssignments.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-10 text-center">
+          <FileCheck2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-slate-700">No Teaching Assignments</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            Your account does not have a subject and section assignment yet. Please contact the school administrator to assign your teaching load.
+          </p>
+        </div>
+      ) : (
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
@@ -481,6 +554,7 @@ export const GradeManagement: React.FC<GradeManagementProps> = ({
           </table>
         </div>
       </div>
+      )}
 
       {/* Return for Correction Modal */}
       {returnFeedbackModal && (

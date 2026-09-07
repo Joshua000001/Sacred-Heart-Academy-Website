@@ -111,6 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: 'school_overview', label: 'School Overview', icon: Building2 },
           { id: 'students', label: 'Students', icon: GraduationCap },
           { id: 'teachers', label: 'Teachers', icon: Users },
+          { id: 'schedules', label: 'Schedules & Timetable', icon: CalendarDays },
           { id: 'grades', label: 'Academic Records', icon: FileCheck2 },
           { id: 'reports', label: 'Official Reports', icon: FileText },
           { id: 'announcements', label: 'Announcements', icon: Megaphone },

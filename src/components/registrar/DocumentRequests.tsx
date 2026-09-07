@@ -27,6 +27,7 @@ import {
   Phone,
   CalendarDays,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 
 import {
@@ -46,28 +47,18 @@ interface DocumentRequestsProps {
 type PublicRequestStatus =
   | 'PENDING'
   | 'UNDER_VERIFICATION'
-  | 'VERIFIED'
-  | 'FOR_HEAD_APPROVAL'
-  | 'HEAD_APPROVED'
-  | 'FOR_PRINCIPAL_APPROVAL'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'RETURNED'
+  | 'PROCESSING'
   | 'READY_FOR_RELEASE'
-  | 'RELEASED';
+  | 'RELEASED'
+  | 'REJECTED';
 
 const PUBLIC_STATUSES: PublicRequestStatus[] = [
   'PENDING',
   'UNDER_VERIFICATION',
-  'VERIFIED',
-  'FOR_HEAD_APPROVAL',
-  'HEAD_APPROVED',
-  'FOR_PRINCIPAL_APPROVAL',
-  'APPROVED',
-  'REJECTED',
-  'RETURNED',
+  'PROCESSING',
   'READY_FOR_RELEASE',
   'RELEASED',
+  'REJECTED',
 ];
 
 const publicStatusLabel = (status: string) => {
@@ -78,22 +69,14 @@ const publicStatusLabel = (status: string) => {
       return 'Under Verification';
     case 'VERIFIED':
       return 'Verified';
-    case 'FOR_HEAD_APPROVAL':
-      return 'For Head Approval';
-    case 'HEAD_APPROVED':
-      return 'Head Approved';
-    case 'FOR_PRINCIPAL_APPROVAL':
-      return 'For Principal Approval';
-    case 'APPROVED':
-      return 'Approved';
-    case 'REJECTED':
-      return 'Rejected';
-    case 'RETURNED':
-      return 'Returned';
+    case 'PROCESSING':
+      return 'Processing';
     case 'READY_FOR_RELEASE':
       return 'Ready for Release';
     case 'RELEASED':
       return 'Released';
+    case 'REJECTED':
+      return 'Rejected';
     default:
       return status;
   }
@@ -107,22 +90,14 @@ const publicStatusColor = (status: string) => {
       return 'bg-blue-100 text-blue-800 border-blue-200';
     case 'VERIFIED':
       return 'bg-cyan-100 text-cyan-800 border-cyan-200';
-    case 'FOR_HEAD_APPROVAL':
-      return 'bg-violet-100 text-violet-800 border-violet-200';
-    case 'HEAD_APPROVED':
-      return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-    case 'FOR_PRINCIPAL_APPROVAL':
-      return 'bg-purple-100 text-purple-800 border-purple-200';
-    case 'APPROVED':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-    case 'REJECTED':
-      return 'bg-rose-100 text-rose-800 border-rose-200';
-    case 'RETURNED':
-      return 'bg-orange-100 text-orange-800 border-orange-200';
+    case 'PROCESSING':
+      return 'bg-blue-100 text-blue-800 border-blue-200';
     case 'READY_FOR_RELEASE':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
     case 'RELEASED':
       return 'bg-slate-100 text-slate-800 border-slate-200';
+    case 'REJECTED':
+      return 'bg-rose-100 text-rose-800 border-rose-200';
     default:
       return 'bg-slate-100 text-slate-800 border-slate-200';
   }
@@ -431,6 +406,40 @@ export const DocumentRequests: React.FC<DocumentRequestsProps> = ({
   // SUPABASE PUBLIC REQUEST WORKFLOW
   // =========================================================
 
+  const deletePublicRequest = async (request: SupabaseDocumentRequest) => {
+    const confirmed = window.confirm(
+      `Delete request ${request.request_number || request.id}? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setProcessingPublicId(request.id);
+      setPublicError('');
+
+      const { supabase } = await import('../../lib/supabase');
+
+      const { error } = await supabase
+        .from('document_requests')
+        .delete()
+        .eq('id', request.id);
+
+      if (error) throw error;
+
+      setPublicRequests((prev) =>
+        prev.filter((item) => item.id !== request.id)
+      );
+      setSelectedPublicRequest(null);
+    } catch (error) {
+      console.error('Failed to delete public request:', error);
+      setPublicError(
+        error instanceof Error ? error.message : 'Could not delete the request.'
+      );
+    } finally {
+      setProcessingPublicId(null);
+    }
+  };
+
   const updatePublicStatus = async (
     request: SupabaseDocumentRequest,
     newStatus: PublicRequestStatus,
@@ -516,23 +525,20 @@ export const DocumentRequests: React.FC<DocumentRequestsProps> = ({
   };
 
   const canStartVerification =
-    selectedPublicRequest?.status ===
-    'PENDING';
+    selectedPublicRequest?.status === 'PENDING';
 
-  const canMarkVerified =
-    selectedPublicRequest?.status ===
-    'UNDER_VERIFICATION';
+  const canProcessRequest =
+    selectedPublicRequest?.status === 'UNDER_VERIFICATION';
 
-  const canForwardToHead =
-    selectedPublicRequest?.status ===
-    'VERIFIED';
+  const canMarkReady =
+    selectedPublicRequest?.status === 'PROCESSING';
+
+  const canMarkReleased =
+    selectedPublicRequest?.status === 'READY_FOR_RELEASE';
 
   const canRejectPublicRequest =
     selectedPublicRequest &&
-    ![
-      'REJECTED',
-      'RELEASED',
-    ].includes(
+    !['REJECTED', 'RELEASED'].includes(
       selectedPublicRequest.status as PublicRequestStatus
     );
 
@@ -564,7 +570,7 @@ export const DocumentRequests: React.FC<DocumentRequestsProps> = ({
 
             {isStudent
               ? 'Request academic records and track their status online.'
-              : 'Manage online school-document requests and existing portal requests.'}
+              : "Manage online school-document requests directly through the Registrar's Office."}
 
           </p>
 
@@ -939,6 +945,19 @@ export const DocumentRequests: React.FC<DocumentRequestsProps> = ({
                               <Eye className="w-4 h-4" />
                               Review
                             </button>
+
+                              {currentUser.role === 'REGISTRAR' && (
+                                <button
+                                  type="button"
+                                  disabled={processingPublicId === request.id}
+                                  onClick={() => void deletePublicRequest(request)}
+                                  className="px-3 py-1.5 rounded-lg border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 font-bold text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+                                  title="Delete request"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </button>
+                              )}
 
                           </td>
 
@@ -1972,68 +1991,53 @@ export const DocumentRequests: React.FC<DocumentRequestsProps> = ({
                 </div>
 
                 {/* Processing Information */}
-                <div className="grid lg:grid-cols-3 gap-4">
+                <div className="rounded-2xl bg-slate-50 border border-slate-200 p-5">
 
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Registrar
-                    </p>
-
-                    <p className="font-bold text-slate-900 mt-2">
-                      {selectedPublicRequest.registrar_name ||
-                        'Not yet assigned'}
-                    </p>
-
-                    {selectedPublicRequest.registrar_remarks && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        {selectedPublicRequest.registrar_remarks}
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Assigned Registrar
                       </p>
-                    )}
 
-                  </div>
-
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
-
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      School Head
-                    </p>
-
-                    <p className="font-bold text-slate-900 mt-2">
-                      {selectedPublicRequest.head_name ||
-                        'Pending'}
-                    </p>
-
-                    {selectedPublicRequest.head_remarks && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        {selectedPublicRequest.head_remarks}
+                      <p className="font-bold text-slate-900 mt-2">
+                        {selectedPublicRequest.registrar_name ||
+                          'Not yet assigned'}
                       </p>
-                    )}
 
-                  </div>
+                      {selectedPublicRequest.registrar_remarks && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          {selectedPublicRequest.registrar_remarks}
+                        </p>
+                      )}
+                    </div>
 
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
-
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Principal
-                    </p>
-
-                    <p className="font-bold text-slate-900 mt-2">
-                      {selectedPublicRequest.principal_name ||
-                        'Pending'}
-                    </p>
-
-                    {selectedPublicRequest.principal_remarks && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        {selectedPublicRequest.principal_remarks}
+                    <div className="px-4 py-3 bg-white rounded-xl border border-slate-200">
+                      <p className="text-[10px] uppercase tracking-wider font-black text-slate-400">
+                        Processing Office
                       </p>
-                    )}
+                      <p className="font-bold text-emerald-900 mt-1">
+                        Registrar's Office
+                      </p>
+                    </div>
 
                   </div>
 
                 </div>
 
                 {/* Registrar Actions */}
+
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            disabled={processingPublicId === selectedPublicRequest.id}
+                            onClick={() => void deletePublicRequest(selectedPublicRequest)}
+                            className="px-4 py-2.5 bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 disabled:opacity-50 rounded-xl font-bold text-sm flex items-center gap-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete Request
+                          </button>
+                        </div>
                 {currentUser.role === 'REGISTRAR' && (
                   <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-5">
 
@@ -2041,138 +2045,116 @@ export const DocumentRequests: React.FC<DocumentRequestsProps> = ({
 
                       <ShieldCheck className="w-5 h-5 text-emerald-700 mt-0.5 shrink-0" />
 
-                      <div>
+                      <div className="w-full">
 
                         <h4 className="font-black text-emerald-950">
                           Registrar Actions
                         </h4>
 
-                        <p className="text-sm text-emerald-900/70 mt-1">
-                          Verify the request and forward it to the School Head.
+                        <p className="text-sm text-emerald-800/75 mt-1">
+                          The Registrar can process the request from verification through release.
+                          The Registrar can process the request from verification through release.
                         </p>
 
-                      </div>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
 
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row flex-wrap gap-3 mt-5">
-
-                      {canStartVerification && (
-                        <button
-                          type="button"
-                          disabled={
-                            processingPublicId ===
-                            selectedPublicRequest.id
-                          }
-                          onClick={() =>
-                            void updatePublicStatus(
-                              selectedPublicRequest,
-                              'UNDER_VERIFICATION',
-                              'Started verification'
-                            )
-                          }
-                          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold disabled:opacity-60"
-                        >
-                          {processingPublicId ===
-                          selectedPublicRequest.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Clock className="w-4 h-4" />
+                          {canStartVerification && (
+                            <button
+                              type="button"
+                              disabled={processingPublicId === selectedPublicRequest.id}
+                              onClick={() =>
+                                void updatePublicStatus(
+                                  selectedPublicRequest,
+                                  'UNDER_VERIFICATION',
+                                  'Registrar started verification'
+                                )
+                              }
+                              className="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              Start Verification
+                            </button>
                           )}
 
-                          Start Verification
-                        </button>
-                      )}
-
-                      {canMarkVerified && (
-                        <button
-                          type="button"
-                          disabled={
-                            processingPublicId ===
-                            selectedPublicRequest.id
-                          }
-                          onClick={() =>
-                            void updatePublicStatus(
-                              selectedPublicRequest,
-                              'VERIFIED',
-                              'Verified request and records'
-                            )
-                          }
-                          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold disabled:opacity-60"
-                        >
-                          {processingPublicId ===
-                          selectedPublicRequest.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4" />
+                          {canProcessRequest && (
+                            <button
+                              type="button"
+                              disabled={processingPublicId === selectedPublicRequest.id}
+                              onClick={() =>
+                                void updatePublicStatus(
+                                  selectedPublicRequest,
+                                  'PROCESSING',
+                                  'Registrar marked request as processing'
+                                )
+                              }
+                              className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                            >
+                              <Clock className="w-4 h-4" />
+                              Mark Processing
+                            </button>
                           )}
 
-                          Mark Verified
-                        </button>
-                      )}
-
-                      {canForwardToHead && (
-                        <button
-                          type="button"
-                          disabled={
-                            processingPublicId ===
-                            selectedPublicRequest.id
-                          }
-                          onClick={() =>
-                            void updatePublicStatus(
-                              selectedPublicRequest,
-                              'FOR_HEAD_APPROVAL',
-                              'Forwarded request to School Head'
-                            )
-                          }
-                          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold disabled:opacity-60"
-                        >
-                          {processingPublicId ===
-                          selectedPublicRequest.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <ArrowRight className="w-4 h-4" />
+                          {canMarkReady && (
+                            <button
+                              type="button"
+                              disabled={processingPublicId === selectedPublicRequest.id}
+                              onClick={() =>
+                                void updatePublicStatus(
+                                  selectedPublicRequest,
+                                  'READY_FOR_RELEASE',
+                                  'Registrar marked document as ready for release'
+                                )
+                              }
+                              className="px-4 py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              Ready for Release
+                            </button>
                           )}
 
-                          Forward to School Head
-                        </button>
-                      )}
-
-                      {canRejectPublicRequest && (
-                        <button
-                          type="button"
-                          disabled={
-                            processingPublicId ===
-                            selectedPublicRequest.id
-                          }
-                          onClick={() =>
-                            void updatePublicStatus(
-                              selectedPublicRequest,
-                              'REJECTED',
-                              'Rejected request'
-                            )
-                          }
-                          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold disabled:opacity-60"
-                        >
-                          {processingPublicId ===
-                          selectedPublicRequest.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <XCircle className="w-4 h-4" />
+                          {canMarkReleased && (
+                            <button
+                              type="button"
+                              disabled={processingPublicId === selectedPublicRequest.id}
+                              onClick={() =>
+                                void updatePublicStatus(
+                                  selectedPublicRequest,
+                                  'RELEASED',
+                                  'Registrar marked document as released'
+                                )
+                              }
+                              className="px-4 py-3 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              Mark Released
+                            </button>
                           )}
 
-                          Reject
-                        </button>
-                      )}
+                        </div>
 
-                      {!canStartVerification &&
-                        !canMarkVerified &&
-                        !canForwardToHead &&
-                        !canRejectPublicRequest && (
-                          <p className="text-sm font-semibold text-slate-600">
-                            No Registrar action is available for this status.
-                          </p>
+                        {canRejectPublicRequest && (
+                          <div className="mt-4 pt-4 border-t border-emerald-200">
+
+                            <button
+                              type="button"
+                              disabled={processingPublicId === selectedPublicRequest.id}
+                              onClick={() =>
+                                void updatePublicStatus(
+                                  selectedPublicRequest,
+                                  'REJECTED',
+                                  'Registrar rejected the request'
+                                )
+                              }
+                              className="px-4 py-2.5 bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 disabled:opacity-50 rounded-xl font-bold text-sm flex items-center gap-2"
+                            >
+                              <XCircle className="w-4 h-4" />
+                              Reject Request
+                            </button>
+
+                          </div>
                         )}
+
+                      </div>
 
                     </div>
 

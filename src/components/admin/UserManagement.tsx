@@ -9,7 +9,12 @@ import {
   Edit2,
   Lock,
   User as UserIcon,
+  Mail,
+  KeyRound,
+  Loader2,
 } from 'lucide-react';
+
+import { supabase } from '../../lib/supabase';
 
 interface UserManagementProps {
   users: User[];
@@ -34,6 +39,52 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onSaveUse
     role: 'TEACHER',
     status: 'Active',
   });
+
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [authMessage, setAuthMessage] = useState<string>('');
+  const [authMessageType, setAuthMessageType] = useState<'success' | 'error' | ''>('');
+
+  const clearAuthMessage = () => {
+    setAuthMessage('');
+    setAuthMessageType('');
+  };
+
+  const handleSendPasswordReset = async (u: User) => {
+    clearAuthMessage();
+
+    const email = u.email?.trim();
+    if (!email) {
+      setAuthMessage('This account has no email address, so a password reset link cannot be sent.');
+      setAuthMessageType('error');
+      return;
+    }
+
+    if (!window.confirm(`Send a password reset link to ${email}?`)) {
+      return;
+    }
+
+    setResettingUserId(u.id);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/`,
+      });
+
+      if (error) throw error;
+
+      setAuthMessage(`Password reset link sent to ${email}. The current password is never shown or exposed by the system.`);
+      setAuthMessageType('success');
+    } catch (error) {
+      console.error('Password reset request failed:', error);
+      setAuthMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to send the password reset email.'
+      );
+      setAuthMessageType('error');
+    } finally {
+      setResettingUserId(null);
+    }
+  };
 
   const handleOpenAdd = () => {
     setEditingUser(null);
@@ -151,7 +202,19 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onSaveUse
           </p>
         </div>
 
-        {/* Tab switch */}
+        {authMessage && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-xs font-semibold ${
+            authMessageType === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          {authMessage}
+        </div>
+      )}
+
+      {/* Tab switch */}
         <div className="flex items-center p-1 bg-slate-100 rounded-xl self-start sm:self-auto">
           <button
             onClick={() => setActiveTab('USERS')}
@@ -193,6 +256,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onSaveUse
                   <th className="py-3 px-4">Username</th>
                   <th className="py-3 px-4">Role</th>
                   <th className="py-3 px-4">Email</th>
+                  <th className="py-3 px-4 text-center">Auth</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
@@ -221,7 +285,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onSaveUse
                         {u.role}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-500">{u.email}</td>
+                    <td className="py-3 px-4 text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{u.email || 'No email'}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {u.email ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                          <ShieldCheck className="w-3 h-3" />
+                          Email Auth
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-400">Not configured</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-center">
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -232,17 +311,48 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onSaveUse
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => handleOpenEdit(u)}
-                        className="p-1 rounded text-slate-400 hover:text-emerald-800 hover:bg-emerald-50"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => void handleSendPasswordReset(u)}
+                          disabled={!u.email || resettingUserId === u.id}
+                          title="Send password reset link"
+                          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {resettingUserId === u.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <KeyRound className="w-3.5 h-3.5" />
+                          )}
+                          Reset
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(u)}
+                          title="Edit user"
+                          className="p-1.5 rounded text-slate-400 hover:text-emerald-800 hover:bg-emerald-50"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'USERS' && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-[11px] text-slate-600">
+          <div className="flex items-start gap-2">
+            <Lock className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+            <p>
+              <strong className="text-slate-800">Password security:</strong> passwords are never displayed, stored in this page, or exposed to administrators.
+              “Reset” sends the user a secure Supabase Auth recovery email. The user chooses the new password from that link.
+            </p>
           </div>
         </div>
       )}
